@@ -9,6 +9,11 @@
     <h2>{{ roomName }}</h2>
     <template v-if="validRoom">
       <h4>Questions:</h4>
+      <div class="question-box-container">
+        Ask a question:
+         <input class="question-box" type="text" v-model="askingQuestion">
+         <span @click="sendQuestion" class="envelope" > &#9993;</span>
+      </div>
       <ul class="question-container">
         <li class="question-item" v-for="question in questions" :key="question.id">
           <span class="vote-arrow" @click="vote(question.id, '1')" v-bind:class="[question.myVote === '1' ? 'active-vote' : '']">▲</span>
@@ -32,7 +37,8 @@ export default {
       errorActive: false,
       roomName: '',
       validRoom: true,
-      questions: {}
+      questions: {},
+      askingQuestion: ''
     }
   },
   computed: {
@@ -64,6 +70,34 @@ export default {
       })
   },
   methods: {
+    sendQuestion () {
+      console.log('Sending Message')
+      if (this.askingQuestion.length <= 5) {
+        this.showError('Message is too short to be valid.')
+        return
+      }
+      const formData = {
+        uID: this.userID,
+        question: this.askingQuestion
+      }
+      axios({
+        method: 'post',
+        url: 'http://localhost:8080/publishQuestion/' + this.roomName,
+        data: formData,
+        params: formData,
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+        }
+      })
+        .then(res => {
+          console.log('Question added')
+          this.askingQuestion = ''
+          this.getQuestions()
+        })
+        .catch(err => {
+          console.log(err.response.data)
+        })
+    },
     vote (id, btn) {
       let voteVal = btn
       if (this.questions[id].myVote === btn) {
@@ -171,14 +205,29 @@ p {
   padding: 0;
 }
 
+.envelope {
+  position: relative;
+  font-size: xx-large;
+  top: 5px;
+  cursor: pointer;
+}
+
+.question-box-container{
+  width: 90%;
+  margin: auto;
+}
+
+.question-box{
+  width: 60%;
+}
+
 .question-container {
-  margin: 50px;
+  margin: 5px 50px 0px 50px;
   text-align: left;
   list-style-type: none;
 }
 
-.question {
-  display: block;
+.question-item {
   white-space: nowrap;
 }
 
