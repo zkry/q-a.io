@@ -28,19 +28,25 @@ type userInfo struct {
 	voteData  map[int]int // voteData keeps track of various votes user made
 	questions []int       // List of questiosn asked by user
 	email     string      // Keep track of user email
+	isOwner   bool
+}
+
+type roomInfo struct {
+	questions map[int]*Question
+	isClosed  bool
 }
 
 var roomNameRegexp = regexp.MustCompile(`^[a-zA-Z0-9]+([a-zA-Z0-9](_|-)?[a-zA-Z0-9])*[a-zA-Z0-9]*$`)
 
 var users map[userKey]*userInfo
-var rooms map[string]map[int]*Question
+var rooms map[string]*roomInfo
 var roomMux sync.Mutex
 var questionID int = 0
 
 func main() {
 	r := mux.NewRouter()
 
-	rooms = make(map[string]map[int]*Question)
+	rooms = make(map[string]*roomInfo)
 	users = make(map[userKey]*userInfo)
 
 	r.HandleFunc("/", homeHandler).Methods("GET")
@@ -89,7 +95,7 @@ func publishQuestionHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	questionID++
-	rooms[roomName][questionID] = &Question{ID: questionID, Q: question, Vote: 0}
+	rooms[roomName].questions[questionID] = &Question{ID: questionID, Q: question, Vote: 0}
 	users[userKey(uID)].questions = append(users[userKey(uID)].questions, questionID)
 
 	log.Printf("Add question \"%s\" to room %s\n", question, roomName)
@@ -123,7 +129,7 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"status":"Could not read quesiton ID"}`))
 		return
 	}
-	if _, ok := rooms[roomName][qID]; !ok {
+	if _, ok := rooms[roomName].questions[qID]; !ok {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(`{"status":"No question found with such ID"}`))
 		return
@@ -139,12 +145,12 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 	// Calculate the vote change needed for user selection
 	prevVal := users[userKey(uID)].voteData[qID]
 	diff := qVal - prevVal
-	rooms[roomName][qID].Vote += diff
+	rooms[roomName].questions[qID].Vote += diff
 
 	users[userKey(uID)].voteData[qID] = qVal
 
 	log.Printf("Voted question %s/%d by %d", roomName, qID, qVal)
-	w.Write([]byte(fmt.Sprintf(`{"status":"ok", "newCt": %d}`, rooms[roomName][qID].Vote)))
+	w.Write([]byte(fmt.Sprintf(`{"status":"ok", "newCt": %d}`, rooms[roomName].questions[qID].Vote)))
 }
 
 func registerUser(w http.ResponseWriter, r *http.Request) {
@@ -158,7 +164,7 @@ func registerUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id := userKey(uuid.New().String())
+	id := generateUserID()
 	log.Printf("Registering user uuid '%s' with room %s\n", id, strings.ToLower(roomName))
 	users[id] = &userInfo{room: roomName, voteData: make(map[int]int)}
 	w.Write([]byte(fmt.Sprintf(`{"status":"ok","id":"%s"}`, id)))
@@ -181,7 +187,7 @@ func getQuestionsHandler(w http.ResponseWriter, r *http.Request) {
 
 	resp := QuestionList{}
 	resp.Questions = []Question{}
-	for _, v := range rooms[roomName] {
+	for _, v := range rooms[roomName].questions {
 		resp.Questions = append(resp.Questions, *v)
 	}
 
@@ -215,7 +221,7 @@ func createRoomHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rooms[roomName] = make(map[int]*Question)
+	rooms[roomName] = &roomInfo{questions: make(map[int]*Question)}
 	secretCookie := http.Cookie{
 		Name:   "questionKey",
 		Value:  "123",
@@ -223,7 +229,39 @@ func createRoomHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, &secretCookie)
 	log.Println("Created room ", roomName)
-	w.Write([]byte(`{"status":"ok"}`))
+	userID := generateUserID()
+	users[userID] = &userInfo{room: roomName, voteData: make(map[int]int), isOwner: true}
+	w.Write([]byte(fmt.Sprintf(`{"status":"ok", "uID":"%s"}`, string(userID))))
+}
+
+func closeRoomHandler(w http.ResponseWriter, r *http.Request) {
+	r.Header.Set("Content-Type", "application/json")
+
+	roomMux.Lock()
+	defer roomMux.Unlock()
+
+	roomName := strings.ToLower(mux.Vars(r)["roomName"])
+	if _, ok := rooms[roomName]; !ok {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"status":"Room does not exist"}`))
+		return
+	}
+
+	uID := userKey(r.FormValue("uID"))
+	if ui, ok := users[uID]; !ok || ui.room != roomName {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(`{"status":"Must be authorized to room"}`))
+		return
+	}
+
+	// Check if user is the owner of the room
+	if !users[uID].isOwner {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(`{"status":"Must be the owner of room to close it"}`))
+		return
+	}
+
+	rooms[roomName].isClosed = true
 }
 
 func listRoomsHandler(w http.ResponseWriter, r *http.Request) {
@@ -248,4 +286,8 @@ func listRoomsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Write(b)
+}
+
+func generateUserID() userKey {
+	return userKey(uuid.New().String())
 }

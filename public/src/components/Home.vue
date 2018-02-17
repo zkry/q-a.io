@@ -6,13 +6,19 @@
         <a class="cancel" @click="hideError">&times;</a> {{ errorMsg }}
       </div>
     </transition>
+    <div class="extra-options" v-if="roomCreated" @click="closeRoom" :style="closeWindowStyle">
+      <span :style="closeWindowTextStyle">Close the room</span>
+    </div>
     <transition name="fade" mode="out-in">
+      <!-- Room Creation Page -->
       <div class="input" v-if="!roomCreated" key="roomSelect">
         <input v-model="roomName" type="text" placeholder="Enter room name" />
         <a class="go-btn" @click="onSubmit">Go</a>
       </div>
+
+      <!-- Room Observing Page -->
       <div v-else key="roomInfo">
-        <h1>{{ roomName }}</h1>
+        <h1 style="z-index: 10;">{{ roomName }}</h1>
         <h4>Questions:</h4>
         <ul class="question-container">
           <li v-for="question in questions" :key="question.id"><span class="vote-arrow">▲</span> <span class="vote-ct">{{ question.vote }}</span> <span class="vote-arrow">▼</span> {{ question.q }}</li>
@@ -34,7 +40,14 @@ export default {
       errorActive: false,
       roomName: '', // ''
       roomCreated: false, // false
-      questions: {}
+      questions: {},
+      // Animations
+      closeWindowStyle: {
+        width: '200px'
+      },
+      closeWindowTextStyle: {
+        opacity: 1
+      }
     }
   },
   computed: {
@@ -44,6 +57,29 @@ export default {
     }
   },
   methods: {
+    closeRoom () {
+
+    },
+    closeRoomAnimation () {
+      let width = 200
+      let roc = 30
+      let i = 0
+      this.closeWindowStyle.zIndex = '-1'
+      let closeAnimationID = 0
+      let clearCloseAnimation = () => { clearInterval(closeAnimationID) }
+      closeAnimationID = setInterval(() => {
+        this.closeWindowStyle.width = width + 'px'
+        this.closeWindowTextStyle.opacity -= 0.01
+        i += 1
+        width += roc
+        if (roc <= 0) {
+          clearCloseAnimation()
+        }
+        if (i % 20 === 0 && roc > 0) {
+          roc -= 4
+        }
+      }, 10)
+    },
     hideError () {
       this.errorActive = false
     },
@@ -185,6 +221,18 @@ input[type="text"] {
 }
 
 .vote-arrow {
+  cursor: pointer;
+}
+
+.extra-options {
+  position: absolute;
+  margin-left: 0;
+  padding: 10px;
+  border-style: solid;
+  border-radius: 0 4px 4px 0;
+  background-color: #f1c40f;
+  left: -5px;
+  border-width: thin;
   cursor: pointer;
 }
 
