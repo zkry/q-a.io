@@ -16,6 +16,6 @@ export default new Router({
       path: '/:roomName',
       name: 'Observer',
       component: Observer
-    },
+    }
   ]
 })

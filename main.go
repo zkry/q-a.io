@@ -24,9 +24,10 @@ type Question struct {
 // Contains internal information that keeps track of users
 type userKey string
 type userInfo struct {
-	room     string      // The room that the user registered with
-	voteData map[int]int // voteData keeps track of various votes user made
-	email    string      // Keep track of user email
+	room      string      // The room that the user registered with
+	voteData  map[int]int // voteData keeps track of various votes user made
+	questions []int       // List of questiosn asked by user
+	email     string      // Keep track of user email
 }
 
 var roomNameRegexp = regexp.MustCompile(`^[a-zA-Z0-9]+([a-zA-Z0-9](_|-)?[a-zA-Z0-9])*[a-zA-Z0-9]*$`)
@@ -48,7 +49,7 @@ func main() {
 	r.HandleFunc("/register/{roomName}", registerUser).Methods("POST")
 	r.HandleFunc("/publishQuestion/{roomName}", publishQuestionHandler).Methods("POST")
 	r.HandleFunc("/getQuestions/{roomName}", getQuestionsHandler).Methods("GET")
-	r.HandleFunc("/vote/{roomName}", voteHandler).Methods("GET")
+	r.HandleFunc("/vote/{roomName}", voteHandler).Methods("POST")
 	http.Handle("/", r)
 
 	log.Println("Starting server on port :8080")
@@ -74,6 +75,13 @@ func publishQuestionHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	uID := r.FormValue("uID")
+	if ui, ok := users[userKey(uID)]; !ok || ui.room != roomName {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(`{"status":"Must be registered to room"}`))
+		return
+	}
+
 	question := r.FormValue("question")
 	if len(question) < maxQLen {
 		w.WriteHeader(http.StatusBadRequest)
@@ -82,6 +90,7 @@ func publishQuestionHandler(w http.ResponseWriter, r *http.Request) {
 
 	questionID++
 	rooms[roomName][questionID] = &Question{ID: questionID, Q: question, Vote: 0}
+	users[userKey(uID)].questions = append(users[userKey(uID)].questions, questionID)
 
 	log.Printf("Add question \"%s\" to room %s\n", question, roomName)
 	w.Write([]byte(`{"status":"ok"}`))

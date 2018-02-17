@@ -10,7 +10,7 @@
     <template v-if="validRoom">
       <h4>Questions:</h4>
       <ul class="question-container">
-        <li v-for="question in questions" :key="question.id">
+        <li class="question-item" v-for="question in questions" :key="question.id">
           <span class="vote-arrow" @click="vote(question.id, '1')" v-bind:class="[question.myVote === '1' ? 'active-vote' : '']">▲</span>
            <span class="vote-ct" >{{ question.vote }}</span>
            <span class="vote-arrow" @click="vote(question.id, '-1')" v-bind:class="[question.myVote === '-1' ? 'active-vote' : '']">▼</span>
@@ -38,16 +38,18 @@ export default {
   computed: {
   },
   created: function () {
+    // Register then get questions
     this.roomName = this.$route.params.roomName
     axios({
-      method: 'get',
-      url: 'http://localhost:8080/getQuestions/' + this.roomName,
+      method: 'post',
+      url: 'http://localhost:8080/register/' + this.roomName,
       headers: {
         'Content-type': 'application/x-www-form-urlencoded; charset=UTF-8'
       }
     })
       .then(res => {
-        console.log(res)
+        this.userID = res.data.id
+        console.log('Registered with id ', this.userID)
         this.getQuestions()
         setInterval(() => {
           this.getQuestions()
@@ -63,11 +65,32 @@ export default {
   },
   methods: {
     vote (id, btn) {
+      let voteVal = btn
       if (this.questions[id].myVote === btn) {
-        this.vote(id, '0')
-      } else {
-        this.vote(id, btn)
+        voteVal = '0'
       }
+      const formData = {
+        qID: id,
+        val: voteVal,
+        uID: this.userID
+      }
+      axios({
+        method: 'post',
+        url: 'http://localhost:8080/vote/' + this.roomName,
+        data: formData,
+        params: formData,
+        headers: {
+          'Content-type': 'application/x-www-form-urlencoded; charset=UTF-8'
+        }
+      })
+        .then(res => {
+          this.questions[id].myVote = voteVal
+          this.$forceUpdate()
+          this.getQuestions()
+        })
+        .catch(err => {
+          console.log(err.response.data)
+        })
     },
     hideError () {
       this.errorActive = false
@@ -77,7 +100,6 @@ export default {
       this.errorActive = true
     },
     getQuestions () {
-      console.log('Obtaining the list of questions for room ', this.roomName)
       axios({
         method: 'get',
         url: 'http://localhost:8080/getQuestions/' + this.roomName,
@@ -86,15 +108,15 @@ export default {
         }
       })
         .then(res => {
-          console.log('Successfully obtained questions: ', res)
           // TODO: Add res → this.questions
           for (let i = 0; i < res.data.questions.length; i++) {
             let id = res.data.questions[i].id
             if (!this.questions.hasOwnProperty(id)) {
-              this.$set(this.questions, id, {q: res.data.questions[i].q, vote: res.data.questions[i].vote, id: id, myVote: ''})
+              this.$set(this.questions, id, {q: res.data.questions[i].q, vote: res.data.questions[i].vote, id: id, myVote: '0'})
+            } else if (this.questions[id].vote !== res.data.questions[i].vote) {
+              this.$set(this.questions, id, {q: res.data.questions[i].q, vote: res.data.questions[i].vote, id: id, myVote: this.questions[id].myVote})
             }
           }
-          console.log('Questions:', this.questions)
         })
     }
   }
@@ -163,6 +185,11 @@ p {
 .vote-arrow {
   cursor: pointer;
 }
+
+.vote-arrow::-moz-selection { background:transparent; }
+.vote-arrow::selection { background:transparent; }
+.vote-ct::-moz-selection { background:transparent; }
+.vote-ct::selection { background:transparent; }
 
 .active-vote {
   color: #d35400;
