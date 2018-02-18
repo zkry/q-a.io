@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 )
 
@@ -44,23 +47,45 @@ var roomMux sync.Mutex
 var questionID int = 0
 
 func main() {
-	r := mux.NewRouter()
+	entry := "./public/dist/index.html"
+	static := "./public/dist/static"
+	port := "8080"
 
 	rooms = make(map[string]*roomInfo)
 	users = make(map[userKey]*userInfo)
 
-	r.HandleFunc("/", homeHandler).Methods("GET")
-	r.HandleFunc("/createRoom", createRoomHandler).Methods("POST")
-	r.HandleFunc("/listRooms", listRoomsHandler).Methods("GET")
-	r.HandleFunc("/closeRoom/{roomName}", closeRoomHandler).Methods("POST")
-	r.HandleFunc("/register/{roomName}", registerUser).Methods("POST")
-	r.HandleFunc("/publishQuestion/{roomName}", publishQuestionHandler).Methods("POST")
-	r.HandleFunc("/getQuestions/{roomName}", getQuestionsHandler).Methods("GET")
-	r.HandleFunc("/vote/{roomName}", voteHandler).Methods("POST")
-	http.Handle("/", r)
+	r := mux.NewRouter()
+	api := r.PathPrefix("/api/v1/").Subrouter()
+	api.HandleFunc("/createRoom", createRoomHandler).Methods("POST")
+	api.HandleFunc("/listRooms", createRoomHandler).Methods("POST")
+	api.HandleFunc("/closeRoom/{roomName}", closeRoomHandler).Methods("POST")
+	api.HandleFunc("/register/{roomName}", registerUser).Methods("POST")
+	api.HandleFunc("/publishQuestion/{roomName}", publishQuestionHandler).Methods("POST")
+	api.HandleFunc("/getQuestions/{roomName}", getQuestionsHandler).Methods("GET")
+	api.HandleFunc("/vote/{roomName}", voteHandler).Methods("POST")
 
-	log.Println("Starting server on port :8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir(static))))
+
+	r.PathPrefix("/").HandlerFunc(IndexHandler(entry))
+
+	srv := &http.Server{
+		Handler: handlers.LoggingHandler(os.Stdout, r),
+		Addr:    "127.0.0.1:" + port,
+		// Good practice: enforce timeouts for servers you create!
+		WriteTimeout: 15 * time.Second,
+		ReadTimeout:  15 * time.Second,
+	}
+
+	log.Println("Starting server on port", port)
+	log.Fatal(srv.ListenAndServe())
+}
+
+func IndexHandler(entrypoint string) func(w http.ResponseWriter, r *http.Request) {
+	fn := func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("index: ", entrypoint)
+		http.ServeFile(w, r, entrypoint)
+	}
+	return http.HandlerFunc(fn)
 }
 
 func homeHandler(w http.ResponseWriter, r *http.Request) {

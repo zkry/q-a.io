@@ -115,7 +115,7 @@ export default {
       }
       axios({
         method: 'post',
-        url: 'http://localhost:8080/closeRoom/' + this.roomName,
+        url: '/api/v1/closeRoom/' + this.roomName,
         data: formData,
         params: formData,
         headers: {
@@ -140,7 +140,7 @@ export default {
     getQuestions () {
       axios({
         method: 'get',
-        url: 'http://localhost:8080/getQuestions/' + this.roomName,
+        url: '/api/v1/getQuestions/' + this.roomName,
         headers: {
           'Content-type': 'application/x-www-form-urlencoded; charset=UTF-8'
         }
@@ -164,7 +164,7 @@ export default {
       }
       axios({
         method: 'post',
-        url: 'http://localhost:8080/createRoom',
+        url: '/api/v1/createRoom',
         data: formData,
         params: formData,
         headers: {

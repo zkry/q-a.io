@@ -75,7 +75,7 @@ export default {
 
     axios({
       method: 'post',
-      url: 'http://localhost:8080/register/' + this.roomName,
+      url: '/api/v1/register/' + this.roomName,
       data: formData,
       params: formData,
       headers: {
@@ -116,7 +116,7 @@ export default {
       }
       axios({
         method: 'post',
-        url: 'http://localhost:8080/publishQuestion/' + this.roomName,
+        url: '/api/v1/publishQuestion/' + this.roomName,
         data: formData,
         params: formData,
         headers: {
@@ -144,7 +144,7 @@ export default {
       }
       axios({
         method: 'post',
-        url: 'http://localhost:8080/vote/' + this.roomName,
+        url: '/api/v1/vote/' + this.roomName,
         data: formData,
         params: formData,
         headers: {
@@ -194,7 +194,7 @@ export default {
     getQuestions () {
       return axios({
         method: 'get',
-        url: 'http://localhost:8080/getQuestions/' + this.roomName,
+        url: '/api/v1/getQuestions/' + this.roomName,
         headers: {
           'Content-type': 'application/x-www-form-urlencoded; charset=UTF-8'
         }
