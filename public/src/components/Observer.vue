@@ -6,20 +6,20 @@
         <a class="cancel" @click="hideError">&times;</a> {{ errorMsg }}
       </div>
     </transition>
-    <h2>{{ roomName }}</h2>
+    <h2>{{ roomName }}<span class="info-text" v-if="closedRoom"> closed</span></h2>
     <template v-if="validRoom">
       <h4>Questions:</h4>
       <div class="question-box-container">
         Ask a question:
-         <input class="question-box" type="text" v-model="askingQuestion">
+         <input class="question-box" type="text" v-model="askingQuestion" :disabled="closedRoom">
          <span @click="sendQuestion" class="envelope" > &#9993;</span>
       </div>
       <ul class="question-container">
-        <li class="question-item" v-for="question in questions" :key="question.id">
-          <span class="vote-arrow" @click="vote(question.id, '1')" v-bind:class="[question.myVote === '1' ? 'active-vote' : '']">▲</span>
-           <span class="vote-ct" >{{ question.vote }}</span>
-           <span class="vote-arrow" @click="vote(question.id, '-1')" v-bind:class="[question.myVote === '-1' ? 'active-vote' : '']">▼</span>
-           {{ question.q }}
+        <li class="question-item" v-for="key in getQuestionKeys" :key="key" :class="{ 'closed-question' : closedRoom }">
+          <span class="vote-arrow" @click="vote(questions[key].id, '1')" v-bind:class="[questions[key].myVote === '1' ? 'active-vote' : '']">▲</span>
+           <span class="vote-ct" >{{ questions[key].vote }}</span>
+           <span class="vote-arrow" @click="vote(questions[key].id, '-1')" v-bind:class="[questions[key].myVote === '-1' ? 'active-vote' : '']">▼</span>
+           {{ questions[key].q }}
         </li>
       </ul>
     </template>
@@ -37,32 +37,66 @@ export default {
       errorActive: false,
       roomName: '',
       validRoom: true,
+      closedRoom: false,
       questions: {},
-      askingQuestion: ''
+      askingQuestion: '',
+      sortMode: 'NORMAL'
     }
   },
   computed: {
+    getQuestionKeys () {
+      let baseKeys = Object.keys(this.questions)
+      if (this.sortMode === 'NORMAL') {
+        return baseKeys
+      } else if (this.sortMode === 'SORTED') {
+        baseKeys.sort((a, b) => {
+          return this.questions[a].vote < this.questions[b].vote
+        })
+        return baseKeys
+      } else if (this.sortMode === 'SORTED_REVERSE') {
+        baseKeys.sort((a, b) => {
+          return this.questions[a].vote > this.questions[b].vote
+        })
+        return baseKeys
+      }
+      return baseKeys
+    }
   },
   created: function () {
     // Register then get questions
     this.roomName = this.$route.params.roomName
+
+    // Check if we have an ID saved. We will send our 'old' id to the server,
+    // if it is still valid we will get the same one back, else get a new one.
+    let oldID = localStorage.getItem(this.roomName + ':userID')
+    const formData = {
+      uID: oldID
+    }
+
     axios({
       method: 'post',
       url: 'http://localhost:8080/register/' + this.roomName,
+      data: formData,
+      params: formData,
       headers: {
         'Content-type': 'application/x-www-form-urlencoded; charset=UTF-8'
       }
     })
       .then(res => {
         this.userID = res.data.id
+        // If our old ID is the same we can reuse other data
+        if (oldID === res.data.id) {
+          this.loadVotes()
+        }
         console.log('Registered with id ', this.userID)
+        localStorage.setItem(this.roomName + ':userID', this.userID)
         this.getQuestions()
         setInterval(() => {
           this.getQuestions()
         }, 2000)
       }).catch(err => {
-        console.log(err.response.data)
-        if (err.response.data.status === 'Room does not exist') {
+        console.log(err)
+        if (err.response && err.response.data.status === 'Room does not exist') {
           this.roomName = `Room ${this.roomName} does not exist`
           this.validRoom = false
         }
@@ -95,7 +129,7 @@ export default {
           this.getQuestions()
         })
         .catch(err => {
-          console.log(err.response.data)
+          this.showError(err.response.data.status)
         })
     },
     vote (id, btn) {
@@ -119,12 +153,36 @@ export default {
       })
         .then(res => {
           this.questions[id].myVote = voteVal
+          // We should also save our vote
+          this.saveVotes()
           this.$forceUpdate()
           this.getQuestions()
         })
         .catch(err => {
           console.log(err.response.data)
         })
+    },
+    saveVotes () {
+      console.log('DEBUG: saving votes')
+      let myVotes = {}
+      // TODO: Create specialized objet for my votes to avoid this iteration
+      for (var key in this.questions) {
+        if (this.questions[key].myVote === '-1' || this.questions[key].myVote === '1') {
+          myVotes[key] = this.questions[key].myVote
+        }
+      }
+      localStorage.setItem(this.roomName + ':votes', JSON.stringify(myVotes))
+    },
+    loadVotes () {
+      this.getQuestions().then(() => {
+        console.log('DEBUG: loading votes')
+        if (localStorage.getItem(this.roomName + ':votes') !== null) {
+          let myVotes = JSON.parse(localStorage.getItem(this.roomName + ':votes'))
+          for (var key in myVotes) {
+            this.questions[key].myVote = myVotes[key]
+          }
+        }
+      })
     },
     hideError () {
       this.errorActive = false
@@ -134,7 +192,7 @@ export default {
       this.errorActive = true
     },
     getQuestions () {
-      axios({
+      return axios({
         method: 'get',
         url: 'http://localhost:8080/getQuestions/' + this.roomName,
         headers: {
@@ -151,6 +209,7 @@ export default {
               this.$set(this.questions, id, {q: res.data.questions[i].q, vote: res.data.questions[i].vote, id: id, myVote: this.questions[id].myVote})
             }
           }
+          this.closedRoom = res.data.is_closed
         })
     }
   }
@@ -212,6 +271,11 @@ p {
   cursor: pointer;
 }
 
+.info-text {
+  font-size: x-small;
+  color: grey;
+}
+
 .question-box-container{
   width: 90%;
   margin: auto;
@@ -229,6 +293,10 @@ p {
 
 .question-item {
   white-space: nowrap;
+}
+
+.closed-question {
+  /* background-color: #95a5a6; */
 }
 
 .vote-arrow {

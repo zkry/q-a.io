@@ -6,8 +6,11 @@
         <a class="cancel" @click="hideError">&times;</a> {{ errorMsg }}
       </div>
     </transition>
-    <div class="extra-options" v-if="roomCreated" @click="closeRoom" :style="closeWindowStyle">
-      <span :style="closeWindowTextStyle">Close the room</span>
+    <div class="extra-options" v-if="roomCreated" @click="closeRoom" >
+      <ul>
+        <li @click="closeRoom" :class="{ 'disabled-text' : roomClosed }">Close the room</li>
+        <li @click="leaveRoom">Leave the room</li>
+      </ul>
     </div>
     <transition name="fade" mode="out-in">
       <!-- Room Creation Page -->
@@ -18,10 +21,16 @@
 
       <!-- Room Observing Page -->
       <div v-else key="roomInfo">
-        <h1 style="z-index: 10;">{{ roomName }}</h1>
+        <h1 style="z-index: 10;">{{ roomName }}<span class="info-text" v-if="roomClosed"> closed</span></h1>
         <h4>Questions:</h4>
-        <ul class="question-container">
-          <li v-for="question in questions" :key="question.id"><span class="vote-arrow">▲</span> <span class="vote-ct">{{ question.vote }}</span> <span class="vote-arrow">▼</span> {{ question.q }}</li>
+        <div class='sort-btn' :class="{ 'active-text' : sortMode === 'SORTED' }" @click="toggleSort" v-if="!noQuestions">Sort</div>
+        <ul class="question-container" >
+          <li class="question-item" v-for="key in getQuestionKeys" :key="key" :class="{ 'closed-question' : closedRoom }">
+            <span class="vote-arrow" @click="vote(questions[key].id, '1')" v-bind:class="[questions[key].myVote === '1' ? 'active-vote' : '']">▲</span>
+             <span class="vote-ct" >{{ questions[key].vote }}</span>
+             <span class="vote-arrow" @click="vote(questions[key].id, '-1')" v-bind:class="[questions[key].myVote === '-1' ? 'active-vote' : '']">▼</span>
+             {{ questions[key].q }}
+          </li>
         </ul>
         <p class="help-text" v-if="noQuestions">Have your listeners go to http://wtte.io/{{roomName}} to submit their questions and have them be voted on</p>
       </div>
@@ -40,45 +49,86 @@ export default {
       errorActive: false,
       roomName: '', // ''
       roomCreated: false, // false
+      userID: '',
       questions: {},
-      // Animations
-      closeWindowStyle: {
-        width: '200px'
-      },
-      closeWindowTextStyle: {
-        opacity: 1
-      }
+      roomClosed: false,
+      sortMode: 'NORMAL'
     }
   },
   computed: {
     noQuestions () {
       console.log(this)
       return Object.keys(this.questions).length === 0
+    },
+    getQuestionKeys () {
+      let baseKeys = Object.keys(this.questions)
+      if (this.sortMode === 'NORMAL') {
+        return baseKeys
+      } else if (this.sortMode === 'SORTED') {
+        baseKeys.sort((a, b) => {
+          return this.questions[a].vote < this.questions[b].vote
+        })
+        return baseKeys
+      } else if (this.sortMode === 'SORTED_REVERSE') {
+        baseKeys.sort((a, b) => {
+          return this.questions[a].vote > this.questions[b].vote
+        })
+        return baseKeys
+      }
+      return baseKeys
+    }
+  },
+  created: function () {
+    // Check if saved userID exists
+    let userID = localStorage.getItem('userID')
+    let roomName = localStorage.getItem('roomName')
+    if (userID && roomName) {
+      this.userID = localStorage.getItem('userID')
+      this.roomName = localStorage.getItem('roomName')
+      console.log('Reading ID from local storage:', this.userID)
+      console.log('Reading room name from local storage:', roomName)
+      this.roomCreated = true
+      this.errorActive = false
+      // Query the backend every second for new questions
+      this.getQuestions()
+      setInterval(() => {
+        this.getQuestions()
+      }, 2000)
     }
   },
   methods: {
-    closeRoom () {
-
+    toggleSort () {
+      if (this.sortMode === 'NORMAL') {
+        this.sortMode = 'SORTED'
+      } else {
+        this.sortMode = 'NORMAL'
+      }
     },
-    closeRoomAnimation () {
-      let width = 200
-      let roc = 30
-      let i = 0
-      this.closeWindowStyle.zIndex = '-1'
-      let closeAnimationID = 0
-      let clearCloseAnimation = () => { clearInterval(closeAnimationID) }
-      closeAnimationID = setInterval(() => {
-        this.closeWindowStyle.width = width + 'px'
-        this.closeWindowTextStyle.opacity -= 0.01
-        i += 1
-        width += roc
-        if (roc <= 0) {
-          clearCloseAnimation()
+    leaveRoom () {
+      localStorage.removeItem('userID')
+      localStorage.removeItem('roomName')
+      location.reload()
+    },
+    closeRoom () {
+      const formData = {
+        uID: this.userID
+      }
+      axios({
+        method: 'post',
+        url: 'http://localhost:8080/closeRoom/' + this.roomName,
+        data: formData,
+        params: formData,
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
         }
-        if (i % 20 === 0 && roc > 0) {
-          roc -= 4
-        }
-      }, 10)
+      })
+        .then(res => {
+          this.roomClosed = true
+          console.log('Room closed')
+        })
+        .catch(err => {
+          console.log(err)
+        })
     },
     hideError () {
       this.errorActive = false
@@ -103,6 +153,9 @@ export default {
               this.$set(this.questions, id, {q: res.data.questions[i].q, vote: res.data.questions[i].vote, id: id})
             }
           }
+          if (res.data.is_closed) {
+            this.roomClosed = true
+          }
         })
     },
     onSubmit () {
@@ -119,6 +172,9 @@ export default {
         }
       })
         .then(res => {
+          this.userID = res.data.uID
+          localStorage.setItem('userID', this.userID)
+          localStorage.setItem('roomName', this.roomName)
           this.roomCreated = true
           this.errorActive = false
           // Query the backend every second for new questions
@@ -196,11 +252,31 @@ input[type="text"] {
   cursor: pointer;
   font-size: 24px;
 }
+
+.sort-btn::-moz-selection { background:transparent; }
+.sort-btn::selection { background:transparent; }
+.sort-btn {
+  margin: 0 0 0 70px;
+  text-align: left;
+  padding: 0;
+  width: 200px;
+  cursor: pointer;
+}
+
+.active-text {
+  color: #2980b9;
+}
+
 .container {
 }
 .input {
   margin: 0;
   padding: 0;
+  margin-top: 100px;
+}
+
+.disabled-text {
+  color: #bdc3c7;
 }
 
 .help-text {
@@ -210,7 +286,7 @@ input[type="text"] {
   margin: auto;
 }
 .question-container {
-  margin: 50px;
+  margin: 0 50px 0 50px;
   text-align: left;
   list-style-type: none;
 }
@@ -224,16 +300,17 @@ input[type="text"] {
   cursor: pointer;
 }
 
+.info-text {
+  font-size: x-small;
+  color: grey;
+}
+
 .extra-options {
   position: absolute;
   margin-left: 0;
   padding: 10px;
-  border-style: solid;
-  border-radius: 0 4px 4px 0;
-  background-color: #f1c40f;
-  left: -5px;
-  border-width: thin;
   cursor: pointer;
+  text-align: left;
 }
 
 .vote-ct {

@@ -52,6 +52,7 @@ func main() {
 	r.HandleFunc("/", homeHandler).Methods("GET")
 	r.HandleFunc("/createRoom", createRoomHandler).Methods("POST")
 	r.HandleFunc("/listRooms", listRoomsHandler).Methods("GET")
+	r.HandleFunc("/closeRoom/{roomName}", closeRoomHandler).Methods("POST")
 	r.HandleFunc("/register/{roomName}", registerUser).Methods("POST")
 	r.HandleFunc("/publishQuestion/{roomName}", publishQuestionHandler).Methods("POST")
 	r.HandleFunc("/getQuestions/{roomName}", getQuestionsHandler).Methods("GET")
@@ -85,6 +86,12 @@ func publishQuestionHandler(w http.ResponseWriter, r *http.Request) {
 	if ui, ok := users[userKey(uID)]; !ok || ui.room != roomName {
 		w.WriteHeader(http.StatusUnauthorized)
 		w.Write([]byte(`{"status":"Must be registered to room"}`))
+		return
+	}
+
+	if rooms[roomName].isClosed {
+		w.WriteHeader(http.StatusForbidden)
+		w.Write([]byte(`{"status":"The room has been closed"}`))
 		return
 	}
 
@@ -164,15 +171,21 @@ func registerUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id := generateUserID()
+	// Check the id passed in. If valid let the user keep it
+	id := userKey(r.FormValue("uID"))
+	if ui, ok := users[userKey(id)]; !ok || ui.room != roomName {
+		id = generateUserID()
+		users[id] = &userInfo{room: roomName, voteData: make(map[int]int)}
+	}
+
 	log.Printf("Registering user uuid '%s' with room %s\n", id, strings.ToLower(roomName))
-	users[id] = &userInfo{room: roomName, voteData: make(map[int]int)}
 	w.Write([]byte(fmt.Sprintf(`{"status":"ok","id":"%s"}`, id)))
 }
 
 func getQuestionsHandler(w http.ResponseWriter, r *http.Request) {
 	type QuestionList struct {
 		Questions []Question `json:"questions"`
+		IsClosed  bool       `json:"is_closed"`
 	}
 	r.Header.Set("Content-Type", "application/json")
 	roomName := strings.ToLower(mux.Vars(r)["roomName"])
@@ -190,6 +203,7 @@ func getQuestionsHandler(w http.ResponseWriter, r *http.Request) {
 	for _, v := range rooms[roomName].questions {
 		resp.Questions = append(resp.Questions, *v)
 	}
+	resp.IsClosed = rooms[roomName].isClosed
 
 	b, err := json.Marshal(resp)
 	if err != nil {
@@ -261,6 +275,7 @@ func closeRoomHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Println("Closing room ", roomName)
 	rooms[roomName].isClosed = true
 }
 
