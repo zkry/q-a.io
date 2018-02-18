@@ -49,7 +49,10 @@ var questionID int = 0
 func main() {
 	entry := "./public/dist/index.html"
 	static := "./public/dist/static"
-	port := "8080"
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
 
 	rooms = make(map[string]*roomInfo)
 	users = make(map[userKey]*userInfo)
