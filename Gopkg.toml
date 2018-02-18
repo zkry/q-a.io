@@ -19,6 +19,7 @@
 #  name = "github.com/x/y"
 #  version = "2.4.0"
 
+metadata.heroku['root-package'] = "github.com/zkry/q-a.io"
 
 [[constraint]]
   name = "github.com/google/uuid"
