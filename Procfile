@@ -1,1 +1,1 @@
-web: wtte
+web: q-a.io
