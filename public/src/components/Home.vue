@@ -32,7 +32,7 @@
              {{ questions[key].q }}
           </li>
         </ul>
-        <p class="help-text" v-if="noQuestions">Have your listeners go to http://wtte.io/{{roomName}} to submit their questions and have them be voted on</p>
+        <p class="help-text" v-if="noQuestions">Have your listeners go to https://salty-journey-73764.herokuapp.com/{{roomName}} to submit their questions and have them be voted on</p>
       </div>
     </transition>
   </div>
