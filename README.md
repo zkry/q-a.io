@@ -1,4 +1,6 @@
 # q-a.io
+(As this is still a work in progress, you can find the app at the following link: https://salty-journey-73764.herokuapp.com/ )
+
 For a 30 minute presentation with hundreds of listeners and only five minutes for question and answer, there's a better way than picking two lucky people. q-a.io is a (soon to be released) web app letting users submit questions and have them be voted on in real time. Let the questions with the most interest be asked and don't be interrupted with off topic questions.
 
 # Building
